@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Image Classifier — อัปโหลดไฟล์โมเดล & รูปภาพ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+  <style>
+    body { font-family: 'Prompt', sans-serif; }
+    .drop-active { border-color: #4f46e5 !important; background-color: #eef2ff !important; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/40 to-sky-50 text-slate-800 py-8 px-4">
+
+  <main class="max-w-3xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="text-center">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-200/80 text-slate-700 text-xs font-medium mb-2" id="status-pill">
+        <span class="w-2 h-2 rounded-full bg-amber-500" id="status-dot"></span>
+        <span id="model-status">ยังไม่ได้โหลดโมเดล — กรุณาอัปโหลดไฟล์โมเดลด้านล่าง</span>
+      </div>
+      <h1 class="text-2xl sm:text-3xl font-bold text-slate-900">ระบบจำแนกรูปภาพด้วย AI</h1>
+    </div>
+
+    <!-- Step 1: Upload Model Files or URL -->
+    <section class="bg-white rounded-2xl shadow-md border border-slate-100 p-5 sm:p-6">
+      <h2 class="text-base font-semibold text-slate-800 mb-3">1. โหลดโมเดล Teachable Machine</h2>
+
+      <!-- Upload Local Files -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <label class="block border border-slate-200 hover:border-indigo-400 rounded-xl p-3 cursor-pointer bg-slate-50/60 transition">
+          <span class="block text-xs font-semibold text-indigo-700">1) model.json</span>
+          <input type="file" id="upload-model" accept=".json" class="mt-1.5 block w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+        </label>
+
+        <label class="block border border-slate-200 hover:border-indigo-400 rounded-xl p-3 cursor-pointer bg-slate-50/60 transition">
+          <span class="block text-xs font-semibold text-indigo-700">2) weights.bin</span>
+          <input type="file" id="upload-weights" accept=".bin" class="mt-1.5 block w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+        </label>
+
+        <label class="block border border-slate-200 hover:border-indigo-400 rounded-xl p-3 cursor-pointer bg-slate-50/60 transition">
+          <span class="block text-xs font-semibold text-indigo-700">3) metadata.json</span>
+          <input type="file" id="upload-metadata" accept=".json" class="mt-1.5 block w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+        </label>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <button type="button" id="load-files-btn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition shadow-sm">
+          โหลดไฟล์โมเดลที่เลือก
+        </button>
+
+        <!-- Or Load via URL -->
+        <div class="flex-1 min-w-[240px] flex gap-2">
+          <input type="text" id="model-url-input" value="https://teachablemachine.withgoogle.com/models/uMAOC2JQD/" placeholder="หรือวางลิงก์โมเดล..." class="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500" />
+          <button type="button" id="load-url-btn" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium transition">
+            โหลดจากลิงก์
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 2: Upload Image & Predict -->
+    <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-5 sm:p-7">
+      <h2 class="text-base font-semibold text-slate-800 mb-3">2. อัปโหลดรูปภาพเพื่อทำนายผล</h2>
+
+      <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center cursor-pointer hover:border-indigo-400 hover:bg-slate-50/70 transition">
+        <input type="file" id="image-input" accept="image/*" class="hidden" />
+
+        <div id="upload-prompt" class="py-5">
+          <p class="text-sm sm:text-base font-medium text-slate-700">คลิกเลือกรูปภาพ, ลากไฟล์มาวาง หรือกด Ctrl+V</p>
+          <p class="text-xs text-slate-400 mt-1">รองรับ JPG, PNG, WEBP</p>
+        </div>
+
+        <div id="preview-wrapper" class="hidden flex-col items-center">
+          <img id="image-preview" src="" alt="Preview" class="max-h-72 rounded-xl border border-slate-200 object-contain mx-auto" />
+          <button type="button" id="change-btn" class="mt-3 px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition">
+            เปลี่ยนรูปภาพ
+          </button>
+        </div>
+      </div>
+
+      <div id="predict-loading" class="hidden text-center py-4 text-sm text-slate-500">
+        กำลังประมวลผลรูปภาพ...
+      </div>
+
+      <div id="result-section" class="hidden mt-6 pt-5 border-t border-slate-100">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold text-slate-800">ผลการทำนาย</h3>
+          <span id="top-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700"></span>
+        </div>
+        <div id="label-container" class="space-y-3"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let model = null;
+
+    const statusDot = document.getElementById("status-dot");
+    const modelStatus = document.getElementById("model-status");
+    const uploadModel = document.getElementById("upload-model");
+    const uploadWeights = document.getElementById("upload-weights");
+    const uploadMetadata = document.getElementById("upload-metadata");
+    const loadFilesBtn = document.getElementById("load-files-btn");
+    const modelUrlInput = document.getElementById("model-url-input");
+    const loadUrlBtn = document.getElementById("load-url-btn");
+
+    const dropZone = document.getElementById("drop-zone");
+    const imageInput = document.getElementById("image-input");
+    const uploadPrompt = document.getElementById("upload-prompt");
+    const previewWrapper = document.getElementById("preview-wrapper");
+    const imagePreview = document.getElementById("image-preview");
+    const changeBtn = document.getElementById("change-btn");
+    const predictLoading = document.getElementById("predict-loading");
+    const resultSection = document.getElementById("result-section");
+    const labelContainer = document.getElementById("label-container");
+    const topBadge = document.getElementById("top-badge");
+
+    function setStatus(state, text) {
+      statusDot.className = "w-2 h-2 rounded-full";
+      if (state === "ready") statusDot.classList.add("bg-emerald-500");
+      else if (state === "error") statusDot.classList.add("bg-rose-500");
+      else statusDot.classList.add("bg-amber-500", "animate-pulse");
+      modelStatus.textContent = text;
+    }
+
+    // โหลดโมเดลจาก 3 ไฟล์ในเครื่อง
+    loadFilesBtn.addEventListener("click", async () => {
+      const mFile = uploadModel.files[0];
+      const wFile = uploadWeights.files[0];
+      const metaFile = uploadMetadata.files[0];
+
+      if (!mFile || !wFile || !metaFile) {
+        alert("กรุณาเลือกไฟล์ให้ครบทั้ง 3 ไฟล์: model.json, weights.bin และ metadata.json");
+        return;
+      }
+
+      try {
+        setStatus("loading", "กำลังโหลดไฟล์โมเดล...");
+        model = await tmImage.loadFromFiles(mFile, wFile, metaFile);
+        setStatus("ready", "โหลดไฟล์โมเดลสำเร็จ พร้อมใช้งาน!");
+        if (imagePreview.src) predictImage();
+      } catch (err) {
+        console.error(err);
+        setStatus("error", "โหลดไฟล์โมเดลไม่สำเร็จ ตรวจสอบไฟล์อีกครั้ง");
+      }
+    });
+
+    // โหลดโมเดลจาก URL
+    loadUrlBtn.addEventListener("click", async () => {
+      let url = modelUrlInput.value.trim();
+      if (!url) return alert("กรุณาใส่ลิงก์โมเดล");
+      if (!url.endsWith("/")) url += "/";
+
+      try {
+        setStatus("loading", "กำลังโหลดโมเดลจากลิงก์...");
+        model = await tmImage.load(url + "model.json", url + "metadata.json");
+        setStatus("ready", "โหลดโมเดลจากลิงก์สำเร็จ พร้อมใช้งาน!");
+        if (imagePreview.src) predictImage();
+      } catch (err) {
+        console.error(err);
+        setStatus("error", "โหลดโมเดลจากลิงก์ไม่สำเร็จ");
+      }
+    });
+
+    // อัปโหลดรูปภาพ
+    dropZone.addEventListener("click", (e) => {
+      if (e.target !== changeBtn) imageInput.click();
+    });
+    changeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      imageInput.click();
+    });
+    imageInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) handleImageFile(e.target.files[0]);
+    });
+
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropZone.classList.add("drop-active");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drop-active"));
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("drop-active");
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) handleImageFile(e.dataTransfer.files[0]);
+    });
+
+    window.addEventListener("paste", (e) => {
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      for (const item of items) {
+        if (item.type.indexOf("image") !== -1) {
+          handleImageFile(item.getAsFile());
+          break;
+        }
+      }
+    });
+
+    function handleImageFile(file) {
+      if (!file.type.startsWith("image/")) {
+        alert("กรุณาเลือกไฟล์รูปภาพเท่านั้น");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        imagePreview.onload = () => {
+          if (model) predictImage();
+          else alert("โหลดรูปแล้ว กรุณากดโหลดไฟล์โมเดลที่ข้อ 1 ก่อนครับ");
+        };
+        imagePreview.src = e.target.result;
+        uploadPrompt.classList.add("hidden");
+        previewWrapper.classList.remove("hidden");
+        previewWrapper.classList.add("flex");
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function predictImage() {
+      if (!model) return;
+      resultSection.classList.add("hidden");
+      predictLoading.classList.remove("hidden");
+      await new Promise((r) => setTimeout(r, 80));
+
+      const predictions = await model.predict(imagePreview);
+      predictions.sort((a, b) => b.probability - a.probability);
+
+      const top = predictions[0];
+      topBadge.textContent = `${top.className} (${(top.probability * 100).toFixed(1)}%)`;
+
+      labelContainer.innerHTML = "";
+      predictions.forEach((pred, idx) => {
+        const pct = (pred.probability * 100).toFixed(1);
+        const isTop = idx === 0;
+        labelContainer.insertAdjacentHTML("beforeend", `
+          <div>
+            <div class="flex justify-between text-sm mb-1 ${isTop ? "text-indigo-700 font-semibold" : "text-slate-600"}">
+              <span>${pred.className}</span>
+              <span>${pct}%</span>
+            </div>
+            <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+              <div class="${isTop ? "bg-indigo-600" : "bg-slate-300"} h-3 rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `);
+      });
+
+      predictLoading.classList.add("hidden");
+      resultSection.classList.remove("hidden");
+    }
+  </script>
+</body>
+</html>
